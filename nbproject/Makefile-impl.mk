@@ -24,7 +24,7 @@ CLEAN_SUBPROJECTS=${CLEAN_SUBPROJECTS_${SUBPROJECTS}}
 
 
 # Project Name
-PROJECTNAME=dbtProject (2)
+PROJECTNAME=Project
 
 # Active Configuration
 DEFAULTCONF=Debug

@@ -505,9 +505,39 @@ void EliminateDuplicates (char *infile, unsigned char field, block_t *buffer, un
     //close files
     fclose(input);
     fclose(output);
+    remove("temp.bin");
 }
 
 
+///////////////////////////////////////////////////
+
+void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buffer, unsigned int nmem_blocks, char *outfile, unsigned int *nres, unsigned int *nios)
+{
+    unsigned int nsorted_segs = 0;
+    unsigned int npasses = 0;
+
+    //sort the inputs
+    MergeSort(infile1, field, buffer, nmem_blocks, "temp1.bin", &nsorted_segs, &npasses, nios);
+    MergeSort(infile2, field, buffer, nmem_blocks, "temp2.bin", &nsorted_segs, &npasses, nios);
+    
+    //open sorted file
+    FILE *input1, *input2;
+    input1 = fopen("temp1.bin", "r");
+    input2 = fopen("temp2.bin", "r");
+    //open output file
+    FILE *output;
+    output = fopen(outfile, "w");
+    
+    //we have nmem_blocks in buffer...last one will be output,and the rest for infile1 and infile2
+    
+    
+    //close the files,and delete any temp files what were created
+    fclose(input1);
+    fclose(input2);
+    fclose(output);
+    remove("temp1.bin");
+    remove("temp2.bin");
+}
 
 ///////////////////////////////////////////////////
 
@@ -579,7 +609,7 @@ int compareRecords(record_t *record, record_t *record2, unsigned char field) {
 }
 
 
-void MergeJoin(char *infile1, char *infile2, unsigned char field, block_t *buffer, unsigned int nmem_blocks, char *outfile, unsigned int *nres, unsigned int *nios)
+void MergeJoinold(char *infile1, char *infile2, unsigned char field, block_t *buffer, unsigned int nmem_blocks, char *outfile, unsigned int *nres, unsigned int *nios)
 {
     
     

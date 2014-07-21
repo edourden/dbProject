@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
     //call Mergesort
     start = clock();
     cout<<"Running Mergesort...\n";
-    MergeSort(argv[1], field, buffer, nmem_blocks,"MergesortOutput.bin", &nsorted_segs, &npasses, &nios);
+  //  MergeSort(argv[1], field, buffer, nmem_blocks,"MergesortOutput.bin", &nsorted_segs, &npasses, &nios);
     stop = clock();
     t = (double) (stop-start)/CLOCKS_PER_SEC;
     cout<<"Mergesort run:";
@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
     nios = 0;
     start = clock();
     cout<<"Running Eliminate Duplicates...\n";
-    EliminateDuplicates(argv[1], field, buffer, nmem_blocks, "EliminateOutput.bin", &nunique, &nios);
+  //  EliminateDuplicates(argv[1], field, buffer, nmem_blocks, "EliminateOutput.bin", &nunique, &nios);
     stop = clock();
     t = (double) (stop-start)/CLOCKS_PER_SEC;
     cout<<"Eliminate Duplicates run:";
