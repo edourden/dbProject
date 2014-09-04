@@ -549,13 +549,58 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
     //input2 is from blocks1 to blocks2 
     //and the output block is from blocks2 to nmem_blocks
     
-    int block_1 = 0; //block of input 1
-    int block_2 = blocks1; //block of 
+    int block_1 = 0; //block of input1
+    int block_2 = blocks1; //block of input2
+    int r1 = 0; //record from block1
+    int r2 = 0; //record from block2 
     int last_block_i = 0; //keeps track of the last entry in the last block
     int id = 0; //keeps track of the id for the output blocks
-    int result;
+    int result; //parameter for the comparison between records
+    bool end = false;
     
-    
+    while (!end) 
+    {
+        result = compare(&(buffer[block_1].entries[r1]), &(buffer[block_2].entries[r2]));
+        if (!result) 
+        {//FIELD of these record is the same
+            //write that record in the last block of buffer
+            buffer[nmem_blocks - 1].entries[last_block_i] = buffer[block_1].entries[r1];
+            last_block_i++;
+            (*nres)++; //increment nres value
+            
+            //check if last block is full
+            if (last_block_i == MAX_RECORDS_PER_BLOCK) {
+                //write last block to output file
+                buffer[nmem_blocks - 1].blockid = id;
+                buffer[nmem_blocks - 1].nreserved = MAX_RECORDS_PER_BLOCK;
+                fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
+                (*nios)++;
+                id++;
+                last_block_i = 0;
+            }
+        } else if (result > 0) {//the field of r1 is greater than r2, get next record from input2
+            r2++;
+            if (r2 == buffer[block_2].nreserved) 
+            {//reached end of block for buffer[block_2]
+                
+            }
+        } else {//the field of r2 is greater than r1, get next record from input1
+            r1++;
+            if (r1 == buffer[block_1].nreserved) 
+            {//reached end of block for buffer[block_1]
+                block_1++;
+                if (block_1 == blocks1) 
+                {
+                    block_1 = 0;
+                    while (fread(&buffer[blocks1], 1, sizeof (block_t), input1)) {
+                        (*nios)++;
+                        blocks1++;
+                    }
+                }
+                    
+            }
+        }
+    }
     
     for(int i=0; i<blocks1; i++)
     {//i goes through the blocks from input1
