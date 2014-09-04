@@ -528,10 +528,63 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
     FILE *output;
     output = fopen(outfile, "w");
     
-    //we have nmem_blocks in buffer...last one will be output,and the rest for infile1 and infile2
+    //fill the first positions of the buffer from input1,until there are only 2 
+    //empty blocks in buffer or we reach the end of input1
+    int blocks1 = 0;
+    while(blocks1 < nmem_blocks-2 && fread(&buffer[blocks1], 1, sizeof (block_t), input1))
+    {
+        (*nios)++; 
+        blocks1++;
+    }
+    //input1 is from 0 to blocks1,block in buffer
+    
+    //fill the rest of the buffer,excluding last block,from input2
+    int blocks2 = blocks1;
+    while(blocks2 < nmem_blocks-1 && fread(&buffer[blocks2], 1, sizeof (block_t), input2))
+    {
+      (*nios)++;
+      blocks2++;
+    }
+    //input1 is from 0 to blocks1
+    //input2 is from blocks1 to blocks2 
+    //and the output block is from blocks2 to nmem_blocks
+    
+    int ignore_till_segment = 0;
+    int last_block_i = 0; //keeps track of the last entry in the last block
+    int id = 0; //keeps track of the id for the output blocks
+    
+    for(int i=0; i<blocks1; i++)
+    {//i goes through the blocks from input1
+        for(int r1=0; r1<buffer[i].nreserved; r1++)
+        {//r1 goes through every record of the i block
+            for(int j=blocks1; j<blocks2; j++)
+            {//j goes through the blocks from input2
+                for(int r2=0; r2<buffer[j].nreserved; r2++)
+                {//r2 goes through every record of the j block
+                    if (!compare(&(buffer[i].entries[r1]), &(buffer[j].entries[r2]))) 
+                    {//FIELD of these record is the same
+                        //write that record in the last block of buffer
+                        buffer[nmem_blocks - 1].entries[last_block_i] = buffer[i].entries[r1];
+                        last_block_i++;
+                        //check if last block is full
+                        if (last_block_i == MAX_RECORDS_PER_BLOCK) 
+                        {
+                            //write last block to output file
+                            buffer[nmem_blocks - 1].blockid = id;
+                            buffer[nmem_blocks - 1].nreserved = MAX_RECORDS_PER_BLOCK;
+                            fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
+                            (*nios)++;
+                            id++;
+                            last_block_i = 0;
+                        }
+                    }
+                }
+            }
+        }
+    }
     
     
-    //close the files,and delete any temp files what were created
+    //close the files,and delete any temp files that were created
     fclose(input1);
     fclose(input2);
     fclose(output);
