@@ -549,9 +549,13 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
     //input2 is from blocks1 to blocks2 
     //and the output block is from blocks2 to nmem_blocks
     
-    int ignore_till_segment = 0;
+    int block_1 = 0; //block of input 1
+    int block_2 = blocks1; //block of 
     int last_block_i = 0; //keeps track of the last entry in the last block
     int id = 0; //keeps track of the id for the output blocks
+    int result;
+    
+    
     
     for(int i=0; i<blocks1; i++)
     {//i goes through the blocks from input1
@@ -559,9 +563,10 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
         {//r1 goes through every record of the i block
             for(int j=blocks1; j<blocks2; j++)
             {//j goes through the blocks from input2
-                for(int r2=0; r2<buffer[j].nreserved; r2++)
+                for(int r2=0; r2<buffer[j].nreserved;)
                 {//r2 goes through every record of the j block
-                    if (!compare(&(buffer[i].entries[r1]), &(buffer[j].entries[r2]))) 
+                    result = compare(&(buffer[i].entries[r1]), &(buffer[j].entries[r2]));
+                    if (!result) 
                     {//FIELD of these record is the same
                         //write that record in the last block of buffer
                         buffer[nmem_blocks - 1].entries[last_block_i] = buffer[i].entries[r1];
@@ -576,6 +581,22 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
                             (*nios)++;
                             id++;
                             last_block_i = 0;
+                        }
+                    }
+                    else if (result > 0)
+                    {//the field of r1 is greater than r2, get next record from input2
+                        r2++;
+                        if (r2 == buffer[j].nreserved)
+                        {//reached end of block for buffer[j]
+                            
+                        }
+                    }
+                    else
+                    {//the field of r2 is greater than r1, get next record from input1
+                        r1++;
+                        if (r1 == buffer[i].nreserved)
+                        {//reached end of block for buffer[i]
+                            
                         }
                     }
                 }
