@@ -546,14 +546,20 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
       blocks2++;
     }
     //input1 is from 0 to blocks1
-    //input2 is from blocks1 to blocks2 
-    //and the output block is from blocks2 to nmem_blocks
-    
     int block_1 = 0; //block of input1
-    int block_2 = blocks1; //block of input2
+    int end_of_block1 = blocks1;
     int r1 = 0; //record from block1
-    int r2 = 0; //record from block2 
-    int last_block_i = 0; //keeps track of the last entry in the last block
+    
+    //input2 is from blocks1 to blocks2
+    int block_2 = blocks1; //block of input2
+    int end_of_block2 = blocks2;
+    int r2 = 0; //record from block2  
+    
+    //and the output block is from blocks2 to nmem_blocks
+    int output_block = blocks2; //shows every time to which block we will write the next record
+    int output_block_i = 0; //keeps track of the last entry in the output block
+    int start_of_output = blocks2; //keeps track of the start of output blocks
+    
     int id = 0; //keeps track of the id for the output blocks
     int result; //parameter for the comparison between records
     bool end = false;
@@ -561,94 +567,100 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
     while (!end) 
     {
         result = compare(&(buffer[block_1].entries[r1]), &(buffer[block_2].entries[r2]));
+        
         if (!result) 
         {//FIELD of these record is the same
             //write that record in the last block of buffer
-            buffer[nmem_blocks - 1].entries[last_block_i] = buffer[block_1].entries[r1];
-            last_block_i++;
+            buffer[output_block].entries[output_block_i] = buffer[block_1].entries[r1];
+            output_block_i++;
             (*nres)++; //increment nres value
             
-            //check if last block is full
-            if (last_block_i == MAX_RECORDS_PER_BLOCK) {
-                //write last block to output file
-                buffer[nmem_blocks - 1].blockid = id;
-                buffer[nmem_blocks - 1].nreserved = MAX_RECORDS_PER_BLOCK;
-                fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
-                (*nios)++;
-                id++;
-                last_block_i = 0;
+            //check if output block is full
+            if (output_block_i == MAX_RECORDS_PER_BLOCK) {
+                //get to the next block for output
+                output_block++;
+                output_block_i = 0;
+                //if there are no more blocks left in buffer, write all the output blocks
+                //to file and move the pointers to the start of the output blocks again
+                if(output_block == nmem_blocks)
+                {
+                    for (int i = start_of_output; i < output_block; i++)
+                    {
+                        //write block to output file
+                        buffer[i].blockid = id;
+                        buffer[i].nreserved = MAX_RECORDS_PER_BLOCK;
+                        fwrite(&buffer[i], 1, sizeof (block_t), output);
+                        (*nios)++;
+                        id++;
+                    }
+                    output_block = start_of_output;
+                }
             }
-        } else if (result > 0) {//the field of r1 is greater than r2, get next record from input2
+            //move to the next record from input2
             r2++;
             if (r2 == buffer[block_2].nreserved) 
             {//reached end of block for buffer[block_2]
-                
+                r2 = 0;
+                block_2++;
+                if (block_2 = start_of_output) 
+                {//reached end of blocks from input2
+                    //fill with new blocks from file
+                    int blocks2 = end_of_block1;
+                    while (blocks2 < start_of_output && fread(&buffer[blocks2], 1, sizeof (block_t), input2)) 
+                    {
+                        (*nios)++;
+                        blocks2++;
+                    }
+                    end_of_block2 = blocks2;
+                    block_2 = end_of_block1;
+                }
             }
-        } else {//the field of r2 is greater than r1, get next record from input1
+            
+        } 
+        else if (result > 0) 
+        {//the field of r1 is greater than r2, get next record from input2
+            r2++;
+            if (r2 == buffer[block_2].nreserved) 
+            {//reached end of block for buffer[block_2]
+                r2 = 0;
+                block_2++;
+                if (block_2 == start_of_output) 
+                {//reached end of blocks from input2
+                    //fill with new blocks from file
+                    int blocks2 = end_of_block1;
+                    while (blocks2 < start_of_output && fread(&buffer[blocks2], 1, sizeof (block_t), input2)) 
+                    {
+                        (*nios)++;
+                        blocks2++;
+                    }
+                    end_of_block2 = blocks2;
+                    block_2 = end_of_block1;
+                }
+            }
+        } 
+        else 
+        {//the field of r2 is greater than r1, get next record from input1
             r1++;
             if (r1 == buffer[block_1].nreserved) 
             {//reached end of block for buffer[block_1]
+                r1 = 0;
                 block_1++;
-                if (block_1 == blocks1) 
-                {
-                    block_1 = 0;
-                    while (fread(&buffer[blocks1], 1, sizeof (block_t), input1)) {
+                if (block_1 == end_of_block1) 
+                {//reached end of blocks from input1
+                    //fill with new blocks from file
+                    int blocks1 = 0;
+                    while (blocks1 < end_of_block1 && fread(&buffer[blocks1], 1, sizeof (block_t), input1)) 
+                    {
                         (*nios)++;
                         blocks1++;
                     }
+                    end_of_block1 = blocks1;
+                    block_1 = 0;
                 }
                     
             }
         }
     }
-    
-    for(int i=0; i<blocks1; i++)
-    {//i goes through the blocks from input1
-        for(int r1=0; r1<buffer[i].nreserved; r1++)
-        {//r1 goes through every record of the i block
-            for(int j=blocks1; j<blocks2; j++)
-            {//j goes through the blocks from input2
-                for(int r2=0; r2<buffer[j].nreserved;)
-                {//r2 goes through every record of the j block
-                    result = compare(&(buffer[i].entries[r1]), &(buffer[j].entries[r2]));
-                    if (!result) 
-                    {//FIELD of these record is the same
-                        //write that record in the last block of buffer
-                        buffer[nmem_blocks - 1].entries[last_block_i] = buffer[i].entries[r1];
-                        last_block_i++;
-                        //check if last block is full
-                        if (last_block_i == MAX_RECORDS_PER_BLOCK) 
-                        {
-                            //write last block to output file
-                            buffer[nmem_blocks - 1].blockid = id;
-                            buffer[nmem_blocks - 1].nreserved = MAX_RECORDS_PER_BLOCK;
-                            fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
-                            (*nios)++;
-                            id++;
-                            last_block_i = 0;
-                        }
-                    }
-                    else if (result > 0)
-                    {//the field of r1 is greater than r2, get next record from input2
-                        r2++;
-                        if (r2 == buffer[j].nreserved)
-                        {//reached end of block for buffer[j]
-                            
-                        }
-                    }
-                    else
-                    {//the field of r2 is greater than r1, get next record from input1
-                        r1++;
-                        if (r1 == buffer[i].nreserved)
-                        {//reached end of block for buffer[i]
-                            
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
     
     //close the files,and delete any temp files that were created
     fclose(input1);
