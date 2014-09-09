@@ -520,7 +520,7 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
     MergeSort(infile1, field, buffer, nmem_blocks, "temp1.bin", &nsorted_segs, &npasses, nios);
     MergeSort(infile2, field, buffer, nmem_blocks, "temp2.bin", &nsorted_segs, &npasses, nios);
     
-    //open sorted file
+    //open sorted files
     FILE *input1, *input2;
     input1 = fopen("temp1.bin", "r");
     input2 = fopen("temp2.bin", "r");
@@ -528,41 +528,42 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
     FILE *output;
     output = fopen(outfile, "w");
     
-    //fill the first positions of the buffer from input1,until there are only 2 
-    //empty blocks in buffer or we reach the end of input1
-    int blocks1 = 0;
-    while(blocks1 < nmem_blocks-2 && fread(&buffer[blocks1], 1, sizeof (block_t), input1))
+    //fill the first positions of the buffer from input2,until there are only 2 
+    //empty blocks in buffer or we reach the end of input2
+    int end_of_input2 = 0;
+    while(end_of_input2 < nmem_blocks-2 && fread(&buffer[end_of_input2], 1, sizeof (block_t), input2))
     {
         (*nios)++; 
-        blocks1++;
+        end_of_input2++;
     }
-    //input1 is from 0 to blocks1,block in buffer
+    //input2 is from 0 to end_of_input2 in buffer
     
-    //fill the rest of the buffer,excluding last block,from input2
-    int blocks2 = blocks1;
-    while(blocks2 < nmem_blocks-1 && fread(&buffer[blocks2], 1, sizeof (block_t), input2))
+    //fill the rest of the buffer,excluding last block or until we reach the end of input1
+    int end_of_input1 = end_of_input2;
+    while(end_of_input1 < nmem_blocks-1 && fread(&buffer[end_of_input1], 1, sizeof (block_t), input1))
     {
       (*nios)++;
-      blocks2++;
+      end_of_input1++;
     }
-    //input1 is from 0 to blocks1
-    int block_1 = 0; //block of input1
-    int end_of_block1 = blocks1;
-    int r1 = 0; //record from block1
+    //input2 is from 0 to end_of_input2
+    int start_of_input2 = 0; //block of input2
+    int block_2 = start_of_input2;
+    int r2 = 0; //record from input2
     
-    //input2 is from blocks1 to blocks2
-    int block_2 = blocks1; //block of input2
-    int end_of_block2 = blocks2;
-    int r2 = 0; //record from block2  
+    //input1 is from end_of_input2 to end_of_input1
+    int start_of_input1 = end_of_input2; //block of input1
+    int block_1 = start_of_input1;
+    int r1 = 0; //record from input1
     
-    //and the output block is from blocks2 to nmem_blocks
-    int output_block = blocks2; //shows every time to which block we will write the next record
+    //and the output block is from end_of_input1 to nmem_blocks
+    int output_block = end_of_input1; //shows every time to which block we will write the next record
     int output_block_i = 0; //keeps track of the last entry in the output block
-    int start_of_output = blocks2; //keeps track of the start of output blocks
+    int start_of_output = end_of_input1; //keeps track of the start of output blocks
     
     int id = 0; //keeps track of the id for the output blocks
     int result; //parameter for the comparison between records
     bool end = false;
+    bool need_to_read = false;
     
     while (!end) 
     {
@@ -596,23 +597,27 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
                     output_block = start_of_output;
                 }
             }
+            
             //move to the next record from input2
             r2++;
             if (r2 == buffer[block_2].nreserved) 
             {//reached end of block for buffer[block_2]
                 r2 = 0;
                 block_2++;
-                if (block_2 = start_of_output) 
+                if (block_2 == start_of_input1) 
                 {//reached end of blocks from input2
                     //fill with new blocks from file
-                    int blocks2 = end_of_block1;
-                    while (blocks2 < start_of_output && fread(&buffer[blocks2], 1, sizeof (block_t), input2)) 
+                    block_2 = start_of_input2;
+                    while (block_2 < start_of_input1 && fread(&buffer[block_2], 1, sizeof (block_t), input2)) 
                     {
                         (*nios)++;
-                        blocks2++;
+                        block_2++;
                     }
-                    end_of_block2 = blocks2;
-                    block_2 = end_of_block1;
+                    end_of_input2 = block_2;
+                    block_2 = start_of_input2;
+                    //the records we are flushing may have a match with other later records from input1
+                    //so we need to read them again at some point
+                    need_to_read = true;
                 }
             }
             
@@ -624,40 +629,56 @@ void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buff
             {//reached end of block for buffer[block_2]
                 r2 = 0;
                 block_2++;
-                if (block_2 == start_of_output) 
+                if (block_2 == start_of_input1) 
                 {//reached end of blocks from input2
                     //fill with new blocks from file
-                    int blocks2 = end_of_block1;
-                    while (blocks2 < start_of_output && fread(&buffer[blocks2], 1, sizeof (block_t), input2)) 
+                    block_2 = start_of_input2;
+                    while (block_2 < start_of_input1 && fread(&buffer[block_2], 1, sizeof (block_t), input2)) 
                     {
                         (*nios)++;
-                        blocks2++;
+                        block_2++;
                     }
-                    end_of_block2 = blocks2;
-                    block_2 = end_of_block1;
+                    end_of_input2 = block_2;
+                    block_2 = start_of_input2;
                 }
             }
         } 
         else 
         {//the field of r2 is greater than r1, get next record from input1
-            r1++;
-            if (r1 == buffer[block_1].nreserved) 
-            {//reached end of block for buffer[block_1]
-                r1 = 0;
-                block_1++;
-                if (block_1 == end_of_block1) 
-                {//reached end of blocks from input1
-                    //fill with new blocks from file
-                    int blocks1 = 0;
-                    while (blocks1 < end_of_block1 && fread(&buffer[blocks1], 1, sizeof (block_t), input1)) 
+            if (need_to_read)
+            {//start reading input2 from start
+               fclose(input2);
+               input2 = fopen("temp2.bin", "r");
+               block_2 = start_of_input2;
+                    while (block_2 < start_of_input1 && fread(&buffer[block_2], 1, sizeof (block_t), input2)) 
                     {
                         (*nios)++;
-                        blocks1++;
+                        block_2++;
                     }
-                    end_of_block1 = blocks1;
-                    block_1 = 0;
+                    end_of_input2 = block_2;
+                    block_2 = start_of_input2;
+            }
+            else 
+            {
+                r1++;
+                if (r1 == buffer[block_1].nreserved) 
+                {//reached end of block for buffer[block_1]
+                    r1 = 0;
+                    block_1++;
+                    if (block_1 == end_of_input1) 
+                    {//reached end of blocks from input1
+                        //fill with new blocks from file
+                        block_1 = start_of_input1;
+                        while (block_1 < end_of_input1 && fread(&buffer[block_1], 1, sizeof (block_t), input1)) 
+                        {
+                            (*nios)++;
+                            block_1++;
+                        }
+                        end_of_input1 = block_1;
+                        block_1 = start_of_input1;
+                    }
+
                 }
-                    
             }
         }
     }
