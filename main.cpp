@@ -46,7 +46,7 @@ int main(int argc, char** argv) {
         nios = 0;
         start = clock();
         cout<<"Running Mergejoin...\n";
-     //   MergeJoin(argv[1], argv[4], field, buffer, nmem_blocks, "MergeJoinOutput.bin", &nres, &nios);
+        MergeJoin(argv[1], argv[4], field, buffer, nmem_blocks, "MergeJoinOutput.bin", &nres, &nios);
         stop = clock();
         t = (double) (stop-start)/CLOCKS_PER_SEC;
         cout<<"MergeJoin run:";
