@@ -161,6 +161,20 @@ int compare (const void * a,const void * b)
      
  } 
  
+ ///////////////////////
+ void printBlock(block_t *buffer, int i)
+ {
+     int nreserved = buffer[i].nreserved;
+		
+		// print block contents
+		for (int j=0; j<nreserved; j++) {
+			printf("this is block id: %d, record id: %d, num: %d, str: %s\n", 
+					buffer[i].blockid, buffer[i].entries[j].recid, buffer[i].entries[i].num, buffer[i].entries[i].str);
+		}
+ }
+ //////////////////////
+ 
+ 
 /**
  * Merges the sorted files from start_file till nmem_blocks-1, to one sorted file
  * @param buffer
@@ -230,6 +244,19 @@ void MergeFiles(block_t *buffer,int start_file, int nmem_blocks, char *outfile, 
         last_block_i++;
         block_pointers[min_block]++;
         
+        
+        //check if last block is full
+        if (last_block_i == MAX_RECORDS_PER_BLOCK) 
+        {
+            //write last block to output file
+            buffer[nmem_blocks - 1].nreserved = last_block_i;
+            buffer[nmem_blocks - 1].blockid = id;
+            id++;
+            fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
+            last_block_i = 0;
+            (*nios)++;
+        }
+        
         //check if the block_pointers of the min_i block reached the end of the block
         if (block_pointers[min_block] == buffer[min_block].nreserved) 
         {//check if there is another block in the file of this block
@@ -242,20 +269,22 @@ void MergeFiles(block_t *buffer,int start_file, int nmem_blocks, char *outfile, 
                 finished++;
                 if(finished == nmem_blocks - 2)
                 {//if there is only one not finished file
-                        
-                    //write last block to output file
-                    buffer[nmem_blocks - 1].nreserved = last_block_i;
-                    buffer[nmem_blocks - 1].blockid = id;
-                    id++;
-                    fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
-                    last_block_i = 0;
-                    (*nios)++;
+                    if (last_block_i > 0)
+                    {
+                        //write last block to output file
+                        buffer[nmem_blocks - 1].nreserved = last_block_i;
+                        buffer[nmem_blocks - 1].blockid = id;
+                        id++;
+                        fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
+                        last_block_i = 0;
+                        (*nios)++;
+                    }
                         
                     //find the not finished block in the buffer
                     for(int j=0; j<nmem_blocks - 1; j++)
                     {
                         if (block_pointers[j] < buffer[j].nreserved) 
-                        {//buffer[j] hasnt finished yet
+                        {//buffer[j] has not finished yet
                             //add every record of buffer[j] to last block and when they are finished write it to 
                             while(block_pointers[j] < buffer[j].nreserved)
                             {
@@ -266,7 +295,6 @@ void MergeFiles(block_t *buffer,int start_file, int nmem_blocks, char *outfile, 
                             //write last block
                             buffer[nmem_blocks - 1].nreserved = last_block_i;
                             buffer[nmem_blocks - 1].blockid = id;
-                            id++;
                             fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
                             last_block_i = 0;
                             (*nios)++;
@@ -276,23 +304,13 @@ void MergeFiles(block_t *buffer,int start_file, int nmem_blocks, char *outfile, 
                             {
                                 fwrite(&buffer[0], 1, sizeof(block_t), output);
                                 (*nios) += 2;
-                            } 
+                            }
+                            break;
                         }
                     }
                     break;
                 }
             }
-        }
-        //check if last block is full
-        if (last_block_i == MAX_RECORDS_PER_BLOCK) 
-        {
-            //write last block to output file
-            buffer[nmem_blocks - 1].nreserved = last_block_i;
-            buffer[nmem_blocks - 1].blockid = id;
-            id++;
-            fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
-            last_block_i = 0;
-            (*nios)++;
         }
      } 
      
@@ -511,7 +529,6 @@ void EliminateDuplicates (char *infile, unsigned char field, block_t *buffer, un
     fclose(output);
     remove("temp.bin");
 }
-
 ///////////////////////////////////////////////////
 
 int readFromInput(ifstream &input_file, block_t *buffer, unsigned int n_input_mem_blocks, unsigned int firstPosition, unsigned int *nios, unsigned int &recordsRead) {
