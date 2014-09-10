@@ -803,6 +803,8 @@ void MergeJoin(char *infile1, char *infile2, unsigned char field, block_t *buffe
     input_file1.close();
     input_file2.close();
     output_file.close();
+    remove("temp1.bin");
+    remove("temp2.bin");
     
 }
 
