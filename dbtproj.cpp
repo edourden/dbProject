@@ -5,11 +5,15 @@
 #include <sstream>
 #include <fstream>
 #include "dbtproj.h"
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 using namespace std;
 
 //variable for the function compare
 unsigned char FIELD;
+long buffer_record_size;
 
 /**
  * Function used for comparisons, return 0 if the field of a and b are equal, -1 if the field of b > a
@@ -508,156 +512,6 @@ void EliminateDuplicates (char *infile, unsigned char field, block_t *buffer, un
     remove("temp.bin");
 }
 
-
-///////////////////////////////////////////////////
-
-void MergeJoin (char *infile1, char *infile2, unsigned char field, block_t *buffer, unsigned int nmem_blocks, char *outfile, unsigned int *nres, unsigned int *nios)
-{
-    unsigned int nsorted_segs = 0;
-    unsigned int npasses = 0;
-
-    //sort the inputs
-    MergeSort(infile1, field, buffer, nmem_blocks, "temp1.bin", &nsorted_segs, &npasses, nios);
-    MergeSort(infile2, field, buffer, nmem_blocks, "temp2.bin", &nsorted_segs, &npasses, nios);
-    
-    //open sorted file
-    FILE *input1, *input2;
-    input1 = fopen("temp1.bin", "r");
-    input2 = fopen("temp2.bin", "r");
-    //open output file
-    FILE *output;
-    output = fopen(outfile, "w");
-    
-    //fill the first positions of the buffer from input1,until there are only 2 
-    //empty blocks in buffer or we reach the end of input1
-    int blocks1 = 0;
-    while(blocks1 < nmem_blocks-2 && fread(&buffer[blocks1], 1, sizeof (block_t), input1))
-    {
-        (*nios)++; 
-        blocks1++;
-    }
-    //input1 is from 0 to blocks1,block in buffer
-    
-    //fill the rest of the buffer,excluding last block,from input2
-    int blocks2 = blocks1;
-    while(blocks2 < nmem_blocks-1 && fread(&buffer[blocks2], 1, sizeof (block_t), input2))
-    {
-      (*nios)++;
-      blocks2++;
-    }
-    //input1 is from 0 to blocks1
-    //input2 is from blocks1 to blocks2 
-    //and the output block is from blocks2 to nmem_blocks
-    
-    int block_1 = 0; //block of input1
-    int block_2 = blocks1; //block of input2
-    int r1 = 0; //record from block1
-    int r2 = 0; //record from block2 
-    int last_block_i = 0; //keeps track of the last entry in the last block
-    int id = 0; //keeps track of the id for the output blocks
-    int result; //parameter for the comparison between records
-    bool end = false;
-    
-    while (!end) 
-    {
-        result = compare(&(buffer[block_1].entries[r1]), &(buffer[block_2].entries[r2]));
-        if (!result) 
-        {//FIELD of these record is the same
-            //write that record in the last block of buffer
-            buffer[nmem_blocks - 1].entries[last_block_i] = buffer[block_1].entries[r1];
-            last_block_i++;
-            (*nres)++; //increment nres value
-            
-            //check if last block is full
-            if (last_block_i == MAX_RECORDS_PER_BLOCK) {
-                //write last block to output file
-                buffer[nmem_blocks - 1].blockid = id;
-                buffer[nmem_blocks - 1].nreserved = MAX_RECORDS_PER_BLOCK;
-                fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
-                (*nios)++;
-                id++;
-                last_block_i = 0;
-            }
-        } else if (result > 0) {//the field of r1 is greater than r2, get next record from input2
-            r2++;
-            if (r2 == buffer[block_2].nreserved) 
-            {//reached end of block for buffer[block_2]
-                
-            }
-        } else {//the field of r2 is greater than r1, get next record from input1
-            r1++;
-            if (r1 == buffer[block_1].nreserved) 
-            {//reached end of block for buffer[block_1]
-                block_1++;
-                if (block_1 == blocks1) 
-                {
-                    block_1 = 0;
-                    while (fread(&buffer[blocks1], 1, sizeof (block_t), input1)) {
-                        (*nios)++;
-                        blocks1++;
-                    }
-                }
-                    
-            }
-        }
-    }
-    
-    for(int i=0; i<blocks1; i++)
-    {//i goes through the blocks from input1
-        for(int r1=0; r1<buffer[i].nreserved; r1++)
-        {//r1 goes through every record of the i block
-            for(int j=blocks1; j<blocks2; j++)
-            {//j goes through the blocks from input2
-                for(int r2=0; r2<buffer[j].nreserved;)
-                {//r2 goes through every record of the j block
-                    result = compare(&(buffer[i].entries[r1]), &(buffer[j].entries[r2]));
-                    if (!result) 
-                    {//FIELD of these record is the same
-                        //write that record in the last block of buffer
-                        buffer[nmem_blocks - 1].entries[last_block_i] = buffer[i].entries[r1];
-                        last_block_i++;
-                        //check if last block is full
-                        if (last_block_i == MAX_RECORDS_PER_BLOCK) 
-                        {
-                            //write last block to output file
-                            buffer[nmem_blocks - 1].blockid = id;
-                            buffer[nmem_blocks - 1].nreserved = MAX_RECORDS_PER_BLOCK;
-                            fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
-                            (*nios)++;
-                            id++;
-                            last_block_i = 0;
-                        }
-                    }
-                    else if (result > 0)
-                    {//the field of r1 is greater than r2, get next record from input2
-                        r2++;
-                        if (r2 == buffer[j].nreserved)
-                        {//reached end of block for buffer[j]
-                            
-                        }
-                    }
-                    else
-                    {//the field of r2 is greater than r1, get next record from input1
-                        r1++;
-                        if (r1 == buffer[i].nreserved)
-                        {//reached end of block for buffer[i]
-                            
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    
-    //close the files,and delete any temp files that were created
-    fclose(input1);
-    fclose(input2);
-    fclose(output);
-    remove("temp1.bin");
-    remove("temp2.bin");
-}
-
 ///////////////////////////////////////////////////
 
 int readFromInput(ifstream &input_file, block_t *buffer, unsigned int n_input_mem_blocks, unsigned int firstPosition, unsigned int *nios, unsigned int &recordsRead) {
@@ -728,7 +582,7 @@ int compareRecords(record_t *record, record_t *record2, unsigned char field) {
 }
 
 
-void MergeJoinold(char *infile1, char *infile2, unsigned char field, block_t *buffer, unsigned int nmem_blocks, char *outfile, unsigned int *nres, unsigned int *nios)
+void MergeJoin(char *infile1, char *infile2, unsigned char field, block_t *buffer, unsigned int nmem_blocks, char *outfile, unsigned int *nres, unsigned int *nios)
 {
     
     
@@ -933,4 +787,192 @@ void MergeJoinold(char *infile1, char *infile2, unsigned char field, block_t *bu
     input_file2.close();
     output_file.close();
     
+}
+
+//returns size of file
+long getFileSize(char *filename)
+{
+    
+    struct stat stat_buf;
+    int rc = stat(filename, &stat_buf);
+    return rc == 0 ? stat_buf.st_size : -1;
+}
+
+/**
+ * Function used for hashing
+ * @param record
+ * @return 
+ */
+int hFunction(record_t record)
+{
+    if (FIELD == 0 ) //hash for recid
+    {
+        return record.recid % buffer_record_size;
+    }
+    else if (FIELD == 1) //hash for num
+    {
+        return record.num % buffer_record_size;
+    }
+    else if (FIELD == 2) //hash for string
+    {
+        int sum = 0;
+        int i = 0;
+        while(record.str[i] != '\0')
+        {
+            sum += record.str[i];
+            i++;
+        }
+        return sum % buffer_record_size;
+    }
+    else //hash for num and string 
+    {
+        int sum = 0;
+        int i = 0;
+        while(record.str[i] != '\0')
+        {
+            sum += record.str[i];
+            i++;
+        }
+        return (sum+record.num) % buffer_record_size;
+    }
+}
+
+void HashJoin (char *infile1, char *infile2, unsigned char field, block_t *buffer, unsigned int nmem_blocks, char *outfile, unsigned int *nres, unsigned int *nios)
+{
+    FIELD = field;
+    char filename[100];
+    //set buffer_record_size variable used by the hash function
+    buffer_record_size = (nmem_blocks-2) * MAX_RECORDS_PER_BLOCK;
+    
+    //last two blocks are reserved for the relation and the output
+    
+    //get sizes of both files to find smaller relation
+    long size1 = getFileSize(infile1);
+    long size2 = getFileSize(infile2);
+    
+    FILE *hashfile, *probefile, *temp, *output;
+    ofstream files;
+    
+    //open smaller file to create the hash table 
+    if (size1 <= size2)
+    {
+        hashfile = fopen(infile1,"r");
+        probefile = fopen(infile2, "r");
+    }
+    else
+    {
+        hashfile = fopen(infile2,"r");
+        probefile = fopen(infile1, "r");
+    }
+    output = fopen(outfile, "w");
+    //keep track of any files created for the hashjoin
+    files.open("files.txt");
+    
+    int pos;
+    int output_i = 0;
+    int id = 0;
+    while(fread(&buffer[nmem_blocks-2], 1, sizeof (block_t), hashfile))
+    {
+        (*nios)++;
+        for(int i=0; i<buffer[nmem_blocks-2].nreserved; i++)
+        {
+            //find position of record 
+            pos = hFunction(buffer[nmem_blocks-2].entries[i]);
+            if (!buffer[pos/MAX_RECORDS_PER_BLOCK].entries[pos%MAX_RECORDS_PER_BLOCK].valid)
+            {//bucket is empty,add the matching record 
+                buffer[pos/MAX_RECORDS_PER_BLOCK].entries[pos%MAX_RECORDS_PER_BLOCK] = buffer[nmem_blocks-2].entries[i];
+            }
+            else
+            {//bucket is full, add record to corresponding file
+                sprintf(filename, "file%d", pos);
+                if (getFileSize(filename) == -1)
+                {//file does not exist,add it to the list of files created for the hash table
+                    files<<filename<<"\n";
+                }
+                temp  = fopen(filename, "a");
+                fwrite(&buffer[nmem_blocks-2].entries[i], 1, sizeof(record_t), temp);
+                fclose(temp);
+                (*nios)++;
+            }
+        }
+    }  
+    fclose(hashfile);
+    files.close();
+    
+    //hash table and hash files are ready, now we start reading the second relation
+    while(fread(&buffer[nmem_blocks-2], 1, sizeof(block_t), probefile))
+    {
+        (*nios)++;
+        for(int i=0; i<buffer[nmem_blocks-2].nreserved; i++)
+        {//for every record in the block
+            //get their result with the hash function
+            pos = hFunction(buffer[nmem_blocks-2].entries[i]);
+            //get the matching bucket
+            if (buffer[pos/MAX_RECORDS_PER_BLOCK].entries[pos%MAX_RECORDS_PER_BLOCK].valid)
+            {//bucket is not empty,check record
+                bool write  = false;
+                if(!compare(&(buffer[nmem_blocks-2].entries[i]), &(buffer[pos/MAX_RECORDS_PER_BLOCK].entries[pos%MAX_RECORDS_PER_BLOCK])))
+                {//record in bucket matches,set write to true to write record to output block
+                    write = true;
+                }
+                else //if the records do not match,there may be another record matching in the file for that bucket
+                {//check if there is a file for that bucket
+                    record_t temp_record;
+                    sprintf(filename, "file%d", pos);
+                    temp  = fopen(filename, "r");
+                    //read one by one the records in it and try to find a match
+                    while(fread(&temp_record, 1, sizeof(record_t), temp)) 
+                    {
+                        (*nios)++;
+                        if (!compare(&(buffer[nmem_blocks - 2].entries[i]), &temp_record)) 
+                        {//record in bucket matches,write to output block
+                            write = true;
+                            break;
+                        }
+                    }
+                    fclose(temp);
+                }
+                //write record to output
+                if ( write )
+                {
+                    (*nres)++;
+                    buffer[nmem_blocks - 1].entries[output_i] = buffer[nmem_blocks - 2].entries[i];
+                    output_i++;
+                    //if output block is full,write to file and continue
+                    if ( output_i == MAX_RECORDS_PER_BLOCK )
+                    {
+                        buffer[nmem_blocks - 1].blockid = id;
+                        buffer[nmem_blocks - 1].nreserved = MAX_RECORDS_PER_BLOCK;
+                        fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
+                        id++;
+                        output_i = 0;
+                        (*nios)++;
+                    }
+                }
+            }
+        }
+        
+        
+    }
+    //check if there are records in the output block 
+    if ( output_i > 0 )
+    {
+        //write the last block to output
+        buffer[nmem_blocks - 1].blockid = id;
+        buffer[nmem_blocks - 1].nreserved = MAX_RECORDS_PER_BLOCK;
+        fwrite(&buffer[nmem_blocks - 1], 1, sizeof (block_t), output);
+        (*nios)++;
+    }
+    //delete any files created for the hashing
+    ifstream filenames;
+    filenames.open("files.txt");
+    while(!filenames.eof())
+    {
+        filenames >> filename;
+        remove(filename);
+    }
+    filenames.close();
+    remove("files.txt");
+    fclose(probefile);
+    fclose(output);
 }

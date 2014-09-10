@@ -20,7 +20,7 @@ int main(int argc, char** argv) {
     //call Mergesort
     start = clock();
     cout<<"Running Mergesort...\n";
-  //  MergeSort(argv[1], field, buffer, nmem_blocks,"MergesortOutput.bin", &nsorted_segs, &npasses, &nios);
+    MergeSort(argv[1], field, buffer, nmem_blocks,"MergesortOutput.bin", &nsorted_segs, &npasses, &nios);
     stop = clock();
     t = (double) (stop-start)/CLOCKS_PER_SEC;
     cout<<"Mergesort run:";
@@ -33,7 +33,7 @@ int main(int argc, char** argv) {
     nios = 0;
     start = clock();
     cout<<"Running Eliminate Duplicates...\n";
-  //  EliminateDuplicates(argv[1], field, buffer, nmem_blocks, "EliminateOutput.bin", &nunique, &nios);
+    EliminateDuplicates(argv[1], field, buffer, nmem_blocks, "EliminateOutput.bin", &nunique, &nios);
     stop = clock();
     t = (double) (stop-start)/CLOCKS_PER_SEC;
     cout<<"Eliminate Duplicates run:";
@@ -41,9 +41,9 @@ int main(int argc, char** argv) {
     cout<<"\nNumber of I/Os:               "<<nios;
     cout<<"\nRuntime:                      "<<t<<"\n\n";
     
-    //call Mergejoin if there is a second file 
     if(argv[4] != NULL)
     {
+        //call Mergejoin if there is a second file 
         nios = 0;
         start = clock();
         cout<<"Running Mergejoin...\n";
@@ -51,6 +51,21 @@ int main(int argc, char** argv) {
         stop = clock();
         t = (double) (stop-start)/CLOCKS_PER_SEC;
         cout<<"MergeJoin run:";
+        cout<<"\nNumber of pairs:             "<<nres;
+        cout<<"\nNumber of I/Os:              "<<nios;
+        cout<<"\nRuntime:                     "<<t<<"\n\n";
+        
+        
+        
+        //call Hashjoin if there is a second file 
+        nios = 0;
+        nres = 0;
+        start = clock();
+        cout<<"Running Hashjoin...\n";
+        HashJoin(argv[1], argv[4], field, buffer, nmem_blocks, "HashJoinOutput.bin", &nres, &nios);
+        stop = clock();
+        t = (double) (stop-start)/CLOCKS_PER_SEC;
+        cout<<"HashJoin run:";
         cout<<"\nNumber of pairs:             "<<nres;
         cout<<"\nNumber of I/Os:              "<<nios;
         cout<<"\nRuntime:                     "<<t<<"\n\n";
