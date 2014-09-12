@@ -65,18 +65,6 @@ int compare (const void * a,const void * b)
      buffer[blockid].entries[i] = buffer[store_block].entries[storeid];
      buffer[store_block].entries[storeid] = temp;
  }
-
- void print (block_t *b, int blocks)
- {
-     for (int i=0;i< blocks; i++)
-     {
-         for (int j=0;j<b[i].nreserved;j++)
-         {
-             printf("this is block id: %d, record id: %d, num: %d, str: %s\n",
-	b[i].blockid, b[i].entries[j].recid, b[i].entries[j].num, b[i].entries[j].str);
-         }
-     }
- }
  
  /**
   * quicksort for buffer, finds the position of pivot in the buffer from start_block start_index,
@@ -160,21 +148,7 @@ int compare (const void * a,const void * b)
      }
      
  } 
- 
- ///////////////////////
- void printBlock(block_t *buffer, int i)
- {
-     int nreserved = buffer[i].nreserved;
-		
-		// print block contents
-		for (int j=0; j<nreserved; j++) {
-			printf("this is block id: %d, record id: %d, num: %d, str: %s\n", 
-					buffer[i].blockid, buffer[i].entries[j].recid, buffer[i].entries[i].num, buffer[i].entries[i].str);
-		}
- }
- //////////////////////
- 
- 
+
 /**
  * Merges the sorted files from start_file till nmem_blocks-1, to one sorted file
  * @param buffer
